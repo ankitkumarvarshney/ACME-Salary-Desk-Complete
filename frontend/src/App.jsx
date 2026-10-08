@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Alert, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, MenuItem, Snackbar, TextField, ThemeProvider, Tooltip, createTheme } from '@mui/material'
-import { ArrowDownUp, ArrowLeft, ArrowRight, BriefcaseBusiness, ChartNoAxesCombined, ChevronDown, CircleHelp, Globe2, LayoutDashboard, Pencil, Plus, Search, SlidersHorizontal, UsersRound, X } from 'lucide-react'
+import { ArrowDownUp, ArrowLeft, ArrowRight, BriefcaseBusiness, ChartNoAxesCombined, Check, CircleHelp, Globe2, LayoutDashboard, LogOut, Pencil, Plus, Search, ShieldCheck, SlidersHorizontal, UsersRound, X } from 'lucide-react'
 import './App.css'
 
 const COUNTRIES = ['Australia', 'Canada', 'Germany', 'Singapore', 'United Kingdom', 'United States']
@@ -10,9 +10,19 @@ const CURRENCIES = ['AUD', 'CAD', 'EUR', 'GBP', 'SGD', 'USD']
 const COUNTRY_CURRENCIES = { Australia: 'AUD', Canada: 'CAD', Germany: 'EUR', Singapore: 'SGD', 'United Kingdom': 'GBP', 'United States': 'USD' }
 const EMPTY_FORM = { name: '', email: '', country: 'United States', department: 'Engineering', job_title: '', level: 'L1', salary_currency: 'USD', salary: '' }
 const muiTheme = createTheme({ typography: { fontFamily: 'DM Sans, Avenir Next, sans-serif' }, palette: { primary: { main: '#236c7a' }, error: { main: '#b74c43' } }, shape: { borderRadius: 5 } })
+let csrfToken = ''
+let onUnauthorized = () => {}
 
 async function apiRequest(path, options = {}) {
-  const response = await fetch(path, { headers: { 'Content-Type': 'application/json', ...options.headers }, ...options })
+  const response = await fetch(path, {
+    ...options,
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}), ...options.headers },
+  })
+  if (response.status === 401 && path !== '/api/session') {
+    csrfToken = ''
+    onUnauthorized()
+  }
   const body = await response.json().catch(() => ({}))
   if (!response.ok) {
     const message = body.errors
@@ -114,7 +124,48 @@ function EmployeeTable({ employees, loading, onEdit, onSort, sort, compact = fal
   )
 }
 
-function AppContent() {
+function AccessRequests({ notify }) {
+  const [requests, setRequests] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let active = true
+    apiRequest('/api/admin/access-requests')
+      .then((data) => { if (active) setRequests(data.requests) })
+      .catch((requestError) => { if (active) setError(requestError.message) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [])
+
+  async function decide(request, decision) {
+    try {
+      await apiRequest(`/api/admin/access-requests/${request.id}/${decision}`, { method: 'PATCH' })
+      setRequests((current) => current.filter((entry) => entry.id !== request.id))
+      notify(decision === 'approve' ? `${request.email} approved` : `${request.email} rejected`, 'success')
+    } catch (requestError) {
+      notify(requestError.message, 'error')
+    }
+  }
+
+  return (
+    <section className="approval-section" aria-label="Pending access requests">
+      {error && <Alert severity="error">{error}</Alert>}
+      {loading ? <div className="empty-inline">Loading access requests…</div> : requests.length ? <div className="approval-list">
+        {requests.map((request) => <div className="approval-row" key={request.id}>
+          <div><strong>{request.name}</strong><small>{request.email}</small></div>
+          <time dateTime={request.created_at}>{new Date(request.created_at).toLocaleDateString()}</time>
+          <div className="approval-actions">
+            <Tooltip title="Approve access"><IconButton aria-label={`Approve ${request.email}`} size="small" onClick={() => decide(request, 'approve')}><Check size={17} /></IconButton></Tooltip>
+            <Tooltip title="Reject access"><IconButton aria-label={`Reject ${request.email}`} size="small" onClick={() => decide(request, 'reject')}><X size={17} /></IconButton></Tooltip>
+          </div>
+        </div>)}
+      </div> : <div className="empty-inline">No pending access requests.</div>}
+    </section>
+  )
+}
+
+function AppContent({ user, onLogout }) {
   const [view, setView] = useState('overview')
   const [dashboard, setDashboard] = useState(null)
   const [employees, setEmployees] = useState([])
@@ -196,19 +247,20 @@ function AppContent() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <a className="brand" href="#overview" onClick={() => setView('overview')}><span className="brand-mark"><UsersRound size={19} strokeWidth={2.2} /></span><span><strong>acme</strong><small>PEOPLE OPERATIONS</small></span></a>
+        <a className="brand" href="#overview" onClick={() => setView('overview')}><span className="brand-mark"><UsersRound size={19} strokeWidth={2.2} /></span><span><strong>ACME</strong><small>PEOPLE OPERATIONS</small></span></a>
         <div className="workspace-label">WORKSPACE</div>
         <nav className="side-nav" aria-label="Main navigation">
           <button className={view === 'overview' ? 'nav-item active' : 'nav-item'} onClick={() => setView('overview')}><LayoutDashboard size={17} /> Overview</button>
           <button className={view === 'employees' ? 'nav-item active' : 'nav-item'} onClick={() => setView('employees')}><UsersRound size={17} /> Employee directory<span className="nav-count">{dashboard?.employee_count?.toLocaleString('en') ?? '—'}</span></button>
+          {user.admin && <button className={view === 'access' ? 'nav-item active' : 'nav-item'} onClick={() => setView('access')}><ShieldCheck size={17} /> Access requests</button>}
         </nav>
-        <div className="sidebar-footer"><div className="secure-mark"><span /> Local demo · fictional data</div><div className="profile-row"><span className="profile-avatar">HR</span><span><strong>HR Manager</strong><small>ACME Organization</small></span><ChevronDown size={15} /></div></div>
+        <div className="sidebar-footer"><div className="secure-mark"><span /> Authenticated workspace</div><div className="profile-row"><span className="profile-avatar">HR</span><span><strong>HR Manager</strong><small>{user.email}</small></span><Tooltip title="Sign out"><IconButton aria-label="Sign out" size="small" onClick={onLogout}><LogOut size={16} /></IconButton></Tooltip></div></div>
       </aside>
 
       <main className="main-area">
         <header className="topbar"><div className="crumb"><span>ACME</span><span className="crumb-divider">/</span><span>People &amp; compensation</span></div><div className="topbar-right"><span className="period-label">FY 2026</span><Tooltip title="Compensation figures are annual base salaries and remain separated by currency."><IconButton aria-label="About compensation metrics" size="small"><CircleHelp size={18} /></IconButton></Tooltip><span className="top-avatar">HR</span></div></header>
         <div className="page-content">
-          <div className="page-heading"><div><div className="eyebrow">PEOPLE ANALYTICS <span className="eyebrow-line" /></div><h1>{view === 'overview' ? 'Compensation overview' : 'Employee directory'}</h1><p className="subtitle">{view === 'overview' ? 'A clear view of how ACME pays across its global team.' : 'Find a colleague or manage their current compensation details.'}</p></div><Button className="add-button" variant="contained" startIcon={<Plus size={17} />} onClick={startCreate}>Add employee</Button></div>
+          <div className="page-heading"><div><div className="eyebrow">PEOPLE ANALYTICS <span className="eyebrow-line" /></div><h1>{view === 'overview' ? 'Compensation overview' : view === 'access' ? 'Access requests' : 'Employee directory'}</h1><p className="subtitle">{view === 'overview' ? 'A clear view of how ACME pays across its global team.' : view === 'access' ? 'Review and approve requests to access salary data.' : 'Find a colleague or manage their current compensation details.'}</p></div>{view !== 'access' && <Button className="add-button" variant="contained" startIcon={<Plus size={17} />} onClick={startCreate}>Add employee</Button>}</div>
           {loadError && <Alert severity="error" className="load-alert">{loadError}. Start the Rails API on port 3000 and try refreshing.</Alert>}
 
           {view === 'overview' && <>
@@ -243,6 +295,7 @@ function AppContent() {
             <EmployeeTable employees={employees} loading={loading} onEdit={startEdit} onSort={toggleSort} sort={sort} />
             <div className="pagination-bar"><span>Page {page} of {Math.max(1, pagination.total_pages)}</span><div className="page-controls"><Tooltip title="Previous page"><span><IconButton aria-label="Previous page" size="small" disabled={page <= 1 || loading} onClick={() => { setLoading(true); setPage((current) => current - 1) }}><ArrowLeft size={17} /></IconButton></span></Tooltip><Tooltip title="Next page"><span><IconButton aria-label="Next page" size="small" disabled={page >= pagination.total_pages || loading} onClick={() => { setLoading(true); setPage((current) => current + 1) }}><ArrowRight size={17} /></IconButton></span></Tooltip></div></div>
           </section>}
+          {view === 'access' && user.admin && <AccessRequests notify={notify} />}
           <footer className="page-footer"><span>ACME PEOPLE OPERATIONS</span><span>Salary data · FY 2026</span></footer>
         </div>
       </main>
@@ -252,6 +305,93 @@ function AppContent() {
   )
 }
 
+function Login({ onLogin }) {
+  const [mode, setMode] = useState('login')
+  const [email, setEmail] = useState('')
+  const [name, setName] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [submitted, setSubmitted] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const registering = mode === 'register'
+
+  async function submit(event) {
+    event.preventDefault()
+    setError('')
+    setSubmitted(false)
+    setSubmitting(true)
+    try {
+      const result = await apiRequest(registering ? '/api/registration' : '/api/session', {
+        method: 'POST',
+        body: JSON.stringify(registering ? { name, email, password } : { email, password }),
+      })
+      if (registering) {
+        setSubmitted(true)
+        setPassword('')
+      } else {
+        onLogin(result)
+      }
+    } catch (requestError) {
+      setError(requestError.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <main className="login-shell">
+      <form className="login-panel" onSubmit={submit}>
+        <div className="login-brand"><span className="brand-mark"><UsersRound size={19} /></span><span><strong>ACME</strong><small>PEOPLE OPERATIONS</small></span></div>
+        <div className="section-kicker">AUTHORIZED ACCESS</div>
+        <h1>{registering ? 'Request access' : 'Sign in'}</h1>
+        <p>{registering ? 'Create an account request for administrator review.' : 'Use your approved HR account to continue.'}</p>
+        {error && <Alert severity="error">{error}</Alert>}
+        {submitted && <Alert severity="success">Request submitted. An administrator must approve your account before you can sign in.</Alert>}
+        {registering && <TextField required autoComplete="name" label="Full name" value={name} onChange={(event) => setName(event.target.value)} />}
+        <TextField required autoComplete="username" type="email" label="Work email" value={email} onChange={(event) => setEmail(event.target.value)} />
+        <TextField required autoComplete={registering ? 'new-password' : 'current-password'} inputProps={registering ? { minLength: 12 } : undefined} type="password" label="Password" value={password} onChange={(event) => setPassword(event.target.value)} />
+        <Button type="submit" variant="contained" disabled={submitting}>{submitting ? 'Submitting…' : registering ? 'Submit request' : 'Sign in'}</Button>
+        <button className="login-switch" type="button" onClick={() => { setMode(registering ? 'login' : 'register'); setError(''); setSubmitted(false) }}>{registering ? 'Back to sign in' : 'Request access'}</button>
+      </form>
+    </main>
+  )
+}
+
 export default function App() {
-  return <ThemeProvider theme={muiTheme}><AppContent /></ThemeProvider>
+  const [user, setUser] = useState(null)
+  const [checkingSession, setCheckingSession] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    onUnauthorized = () => { if (active) setUser(null) }
+    apiRequest('/api/session')
+      .then((session) => {
+        if (active) {
+          csrfToken = session.csrf_token
+          setUser(session.user)
+        }
+      })
+      .catch(() => {
+        csrfToken = ''
+        if (active) setUser(null)
+      })
+      .finally(() => { if (active) setCheckingSession(false) })
+    return () => { active = false; onUnauthorized = () => {} }
+  }, [])
+
+  async function logout() {
+    try {
+      await apiRequest('/api/session', { method: 'DELETE' })
+    } finally {
+      csrfToken = ''
+      setUser(null)
+    }
+  }
+
+  function completeLogin(session) {
+    csrfToken = session.csrf_token
+    setUser(session.user)
+  }
+
+  return <ThemeProvider theme={muiTheme}>{checkingSession ? <div className="auth-loading"><CircularProgress size={24} /></div> : user ? <AppContent user={user} onLogout={logout} /> : <Login onLogin={completeLogin} />}</ThemeProvider>
 }

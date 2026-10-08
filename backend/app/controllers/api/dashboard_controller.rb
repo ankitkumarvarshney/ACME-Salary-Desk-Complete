@@ -1,5 +1,7 @@
 module Api
   class DashboardController < ApplicationController
+    before_action :authenticate_user!
+
     def show
       currency_counts = Employee.group(:salary_currency).count
       currency_averages = Employee.group(:salary_currency).average(:salary_cents)

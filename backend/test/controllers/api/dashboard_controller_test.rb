@@ -1,6 +1,12 @@
 require "test_helper"
 
 class Api::DashboardControllerTest < ActionDispatch::IntegrationTest
+  setup do
+    Rails.cache.clear
+      user = User.create!(name: "HR Manager", email: "hr@example.com", password: "correct horse battery staple", status: "approved")
+    post api_session_url, params: { email: user.email, password: "correct horse battery staple" }, as: :json
+  end
+
   test "reports headcount and average pay separately for each currency" do
     Employee.create!(employee_attributes(email: "one@example.com", salary_cents: 8_000_000))
     Employee.create!(employee_attributes(email: "two@example.com", salary_cents: 10_000_000))

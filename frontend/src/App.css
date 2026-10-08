@@ -329,6 +329,30 @@
 .dialog-actions .MuiButton-root { text-transform: none; font-size: 11px; }
 .dialog-actions .MuiButton-contained { background: #246d78; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+.login-shell { display: grid; place-items: center; min-height: 100vh; padding: 24px; background-color: #edf2ee; background-image: repeating-linear-gradient(135deg, transparent 0 18px, rgba(35,108,122,.035) 18px 19px); }
+.login-panel { display: grid; gap: 16px; width: min(100%, 410px); padding: 36px; border: 1px solid #dce5df; border-radius: 6px; background: #fff; box-shadow: 0 18px 48px rgba(24,39,41,.09); }
+.login-brand { display: flex; align-items: center; gap: 11px; margin-bottom: 23px; }
+.login-brand > span:last-child { display: block; }
+.login-brand strong { display: block; color: #213537; font-size: 18px; line-height: 1; }
+.login-brand small { display: block; margin-top: 5px; color: #82918f; font-size: 8px; font-weight: 700; }
+.login-panel .section-kicker { color: #718181; }
+.login-panel h1 { margin: -10px 0 -8px; color: #1d2c2f; font-family: Newsreader, Georgia, serif; font-size: 34px; line-height: 1.1; font-weight: 500; }
+.login-panel > p { margin-bottom: 2px; color: #758184; font-size: 12px; }
+.login-panel .MuiInputBase-root, .login-panel .MuiInputLabel-root { font-size: 13px; }
+.login-panel .MuiButton-root { min-height: 42px; margin-top: 2px; background: #246d78; text-transform: none; font-size: 12px; }
+.auth-loading { display: grid; min-height: 100vh; place-items: center; background: #f5f7f5; }
+.login-switch { justify-self: center; padding: 4px 8px; border: 0; color: #39747a; background: transparent; font-size: 11px; font-weight: 600; cursor: pointer; }
+.login-switch:hover { color: #185963; }
+.approval-section { margin-top: 29px; border-top: 1px solid #dfe7e2; }
+.approval-list { border-bottom: 1px solid #dfe7e2; }
+.approval-row { display: grid; grid-template-columns: minmax(0, 1fr) 130px 86px; align-items: center; gap: 16px; min-height: 69px; padding: 10px 12px; border-bottom: 1px solid #e7ece8; background: #fff; }
+.approval-row:last-child { border-bottom: 0; }
+.approval-row strong, .approval-row small { display: block; }
+.approval-row strong { color: #344344; font-size: 12px; font-weight: 600; }
+.approval-row small, .approval-row time { margin-top: 4px; color: #879493; font-size: 10px; }
+.approval-actions { display: flex; justify-content: flex-end; gap: 5px; }
+.approval-actions .MuiIconButton-root { border: 1px solid #e1e7e4; border-radius: 4px; color: #327b68; }
+.approval-actions .MuiIconButton-root:last-child { color: #b75c4d; }
 
 @media (max-width: 1120px) {
   .sidebar { width: 210px; }
@@ -357,6 +381,10 @@
   .metric-item:last-of-type { border-right: 0; }
 }
 @media (max-width: 560px) {
+  .login-panel { padding: 27px 22px; }
+  .approval-row { grid-template-columns: minmax(0, 1fr) 72px; gap: 5px 10px; }
+  .approval-row time { grid-column: 1; grid-row: 2; }
+  .approval-actions { grid-column: 2; grid-row: 1 / span 2; }
   .topbar { padding: 0 14px; }
   .crumb { gap: 7px; font-size: 9px; }
   .topbar-right { gap: 8px; }

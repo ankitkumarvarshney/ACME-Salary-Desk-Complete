@@ -25,6 +25,9 @@ describe('salary workspace', () => {
   beforeEach(() => {
     submittedEmployee = null
     fetchMock = vi.fn((path, options = {}) => {
+      if (path === '/api/session') {
+        return Promise.resolve(jsonResponse({ user: { email: 'hr@example.com' }, csrf_token: 'test-csrf-token' }))
+      }
       if (path === '/api/dashboard') {
         return Promise.resolve(jsonResponse({
           employee_count: 10_000,
@@ -54,7 +57,7 @@ describe('salary workspace', () => {
     render(<App />)
 
     expect(await screen.findByRole('heading', { name: 'Compensation overview' })).toBeInTheDocument()
-    expect(await screen.findByText('CA$95,000')).toBeInTheDocument()
+    expect((await screen.findAllByText('CA$95,000')).length).toBeGreaterThan(0)
     expect(screen.getByText('10,000', { selector: 'strong' })).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /Employee directory/ }))
@@ -80,5 +83,85 @@ describe('salary workspace', () => {
     await waitFor(() => expect(submittedEmployee?.salary_cents).toBe(9_500_025))
     expect(submittedEmployee).toMatchObject({ name: 'Jordan Lee', email: 'jordan@example.com', salary_currency: 'USD' })
     expect(await screen.findByText('Employee added to the directory')).toBeInTheDocument()
+  })
+
+  it('shows the login form when no valid session exists and submits credentials', async () => {
+    fetchMock.mockImplementation((path, options = {}) => {
+      if (path === '/api/session' && options.method === 'POST') {
+        return Promise.resolve(jsonResponse({ user: { email: 'hr@example.com' }, csrf_token: 'test-csrf-token' }))
+      }
+      if (path === '/api/session') return Promise.reject(new Error('Authentication required'))
+      if (path === '/api/dashboard') {
+        return Promise.resolve(jsonResponse({ employee_count: 0, country_count: 0, department_count: 0, compensation_by_currency: [], departments: [] }))
+      }
+      if (String(path).startsWith('/api/employees')) {
+        return Promise.resolve(jsonResponse({ employees: [], pagination: { current_page: 1, per_page: 20, total_count: 0, total_pages: 0 } }))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+    render(<App />)
+
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Work email' }), { target: { value: 'hr@example.com' } })
+    fireEvent.change(document.querySelector('input[type="password"]'), { target: { value: 'correct horse battery staple' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+    expect(await screen.findByRole('heading', { name: 'Compensation overview' })).toBeInTheDocument()
+    expect(fetchMock.mock.calls.some(([path, options]) => path === '/api/session' && options.method === 'POST')).toBe(true)
+  })
+
+  it('returns to sign-in when an authenticated API request reports an expired session', async () => {
+    fetchMock.mockImplementation((path) => {
+      if (path === '/api/session') return Promise.resolve(jsonResponse({ user: { email: 'hr@example.com' }, csrf_token: 'test-csrf-token' }))
+      if (path === '/api/dashboard') return Promise.resolve(jsonResponse({ error: 'Authentication required' }, 401))
+      return Promise.resolve(jsonResponse({ employees: [], pagination: { current_page: 1, per_page: 20, total_count: 0, total_pages: 0 } }))
+    })
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+  })
+
+  it('submits a registration request without creating a client session', async () => {
+    let registration
+    fetchMock.mockImplementation((path, options = {}) => {
+      if (path === '/api/session') return Promise.reject(new Error('Authentication required'))
+      if (path === '/api/registration') {
+        registration = JSON.parse(options.body)
+        return Promise.resolve(jsonResponse({ message: 'Pending approval' }, 202))
+      }
+      return Promise.resolve(jsonResponse({}))
+    })
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Request access' }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Full name' }), { target: { value: 'New HR User' } })
+    fireEvent.change(screen.getByRole('textbox', { name: 'Work email' }), { target: { value: 'new-hr@example.com' } })
+    fireEvent.change(document.querySelector('input[type="password"]'), { target: { value: 'correct horse battery staple' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Submit request' }))
+
+    expect(await screen.findByText(/must approve your account before you can sign in/i)).toBeInTheDocument()
+    expect(registration).toEqual({ name: 'New HR User', email: 'new-hr@example.com', password: 'correct horse battery staple' })
+  })
+
+  it('shows the approval queue only to admins and sends approval with the CSRF token', async () => {
+    let approvalOptions
+    fetchMock.mockImplementation((path, options = {}) => {
+      if (path === '/api/session') return Promise.resolve(jsonResponse({ user: { email: 'admin@example.com', admin: true }, csrf_token: 'admin-csrf' }))
+      if (path === '/api/dashboard') return Promise.resolve(jsonResponse({ employee_count: 0, country_count: 0, department_count: 0, compensation_by_currency: [], departments: [] }))
+      if (path === '/api/admin/access-requests') return Promise.resolve(jsonResponse({ requests: [{ id: 4, name: 'New HR User', email: 'new-hr@example.com', created_at: '2026-10-08T10:00:00Z' }] }))
+      if (String(path).endsWith('/approve')) {
+        approvalOptions = options
+        return Promise.resolve(jsonResponse({ id: 4, status: 'approved' }))
+      }
+      return Promise.resolve(jsonResponse({ employees: [], pagination: { current_page: 1, per_page: 20, total_count: 0, total_pages: 0 } }))
+    })
+    render(<App />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Access requests' }))
+    expect(await screen.findByText('new-hr@example.com')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Approve new-hr@example.com' }))
+
+    await waitFor(() => expect(approvalOptions?.method).toBe('PATCH'))
+    expect(approvalOptions.headers['X-CSRF-Token']).toBe('admin-csrf')
+    expect(await screen.findByText('new-hr@example.com approved')).toBeInTheDocument()
   })
 })

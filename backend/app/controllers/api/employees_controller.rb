@@ -7,6 +7,8 @@ module Api
     DEFAULT_PER_PAGE = 20
     MAX_PER_PAGE = 100
 
+    before_action :authenticate_user!
+    before_action :verify_csrf_token!, only: %i[create update]
     before_action :set_employee, only: %i[show update]
 
     def index

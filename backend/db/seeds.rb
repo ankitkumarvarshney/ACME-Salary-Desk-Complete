@@ -1,5 +1,16 @@
 raise "Demo seed data is not intended for production" if Rails.env.production?
 
+admin_email = ENV["HR_ADMIN_EMAIL"].to_s.strip.downcase
+admin_password = ENV["HR_ADMIN_PASSWORD"].to_s
+if admin_email.present? || admin_password.present?
+
+	raise "Set both HR_ADMIN_EMAIL and HR_ADMIN_PASSWORD" if admin_email.blank? || admin_password.blank?
+
+	admin = User.find_or_initialize_by(email: admin_email)
+	admin.assign_attributes(name: "HR Administrator", password: admin_password, status: "approved", admin: true)
+	admin.save!
+end
+
 Employee.delete_all
 Employee.connection.reset_pk_sequence!("employees")
 

@@ -11,7 +11,7 @@ flowchart LR
   API --> UI
 ```
 
-The React client and Rails API are separate applications. The Vite proxy keeps local development same-origin from the browser's perspective; production routing and CORS policy are intentionally deployment concerns rather than open CORS in this demo.
+The React client and Rails API are separate applications. The Vite proxy keeps local development same-origin from the browser's perspective; production routing and CORS policy are deployment concerns rather than open CORS.
 
 ## Data and API boundaries
 
@@ -30,4 +30,6 @@ The demo edits the current salary in place. Historical compensation, approvals, 
 
 ## Security boundary
 
-There is no authentication or authorization. The UI's private-data note is not an access control. Treat this as a local fake-data demo only; before production, require SSO, least-privilege authorization, audit trails for salary changes and reads, encrypted transport/storage, secrets management, backups, and privacy-reviewed retention/export controls.
+The API signs 15-minute HS256 JWTs into an `HttpOnly`, `SameSite=Strict` cookie, with `Secure` enabled in production. Passwords use bcrypt. Public registration creates pending accounts; only a bootstrap administrator can approve or reject requests. Approval is checked on login and every protected API request. The administrator is provisioned from environment secrets during seed or an explicit one-time runner command; registration cannot assign administrator or approved state. A separate CSRF nonce is returned to the client and required on writes, and a token-version check revokes sessions on logout. Login and registration are rate limited. The secret signing key is Rails' `secret_key_base` and must be managed as a production secret.
+
+The cookie is inaccessible to page JavaScript, but the browser owner can still inspect their own cookies and network traffic. This is a local demo authentication boundary, not a complete production identity system; real salary data additionally requires SSO/MFA, least-privilege roles, login throttling, audit trails, key rotation, monitoring, encrypted transport/storage, backups, and privacy-reviewed retention/export controls.

@@ -14,6 +14,8 @@ Use two terminals from the repository root. PostgreSQL must be running and your 
 
 ```sh
 cd backend
+export HR_ADMIN_EMAIL=hr@example.com
+export HR_ADMIN_PASSWORD='use-a-unique-password-at-least-12-characters'
 bin/rails db:prepare
 bin/rails db:seed
 bin/rails server -p 3000
@@ -25,7 +27,14 @@ npm install
 npm run dev -- --host 0.0.0.0
 ```
 
-Open the Vite URL printed in the frontend terminal (normally `http://localhost:5173`). Vite proxies `/api` requests to Rails on port 3000. The seed script replaces employee rows with exactly 10,000 deterministic demo records; it refuses to run in production.
+Open the Vite URL printed in the frontend terminal (normally `http://localhost:5173`). The configured HR account is the initial administrator. Other users can request access from the sign-in screen, but remain blocked until an administrator approves them. Vite proxies `/api` requests to Rails on port 3000. The seed script replaces employee rows with exactly 10,000 deterministic demo records; it refuses to run in production. It creates or refreshes the initial administrator only when both environment variables are set.
+
+For an existing database, create the initial administrator without reseeding employees:
+
+```sh
+cd backend
+bin/rails runner 'User.create!(name: "HR Administrator", email: ENV.fetch("HR_ADMIN_EMAIL"), password: ENV.fetch("HR_ADMIN_PASSWORD"), status: "approved", admin: true)'
+```
 
 ## Checks
 
@@ -36,6 +45,9 @@ cd frontend && npm test && npm run lint && npm run build
 
 ## API
 
+- `POST /api/session` accepts `email` and `password`; `GET /api/session` returns the current user; `DELETE /api/session` logs out. All employee and dashboard routes require an authenticated session.
+- `POST /api/registration` accepts `name`, `email`, and `password` and creates a pending account request without issuing a session.
+- `GET /api/admin/access-requests` lists pending requests; `PATCH /api/admin/access-requests/:id/approve` and `/reject` are administrator-only and require the CSRF nonce.
 - `GET /api/dashboard` returns organization totals, department headcount, and average annual base salary grouped by currency.
 - `GET /api/employees` accepts `search`, `country`, `department`, `level`, `salary_currency`, `page`, `per_page`, `sort`, and `direction`.
 - `GET /api/employees/:id` reads a single record.
@@ -43,6 +55,8 @@ cd frontend && npm test && npm run lint && npm run build
 
 `salary_cents` is an integer amount in the smallest unit for the supported two-decimal currencies. Summary amounts are never combined across currencies.
 
-## Demo safety
+## Authentication and demo safety
 
-This is an unauthenticated local assessment demo. The seed data is fictional, but the application must not be connected to real employee salary data until identity, authorization, audit history, secure deployment, and operational controls are designed and implemented.
+The API signs 15-minute HS256 JWTs with Rails' secret key and stores them only in `HttpOnly`, `SameSite=Strict` cookies (also `Secure` in production). Mutating requests require a separate CSRF nonce. Passwords are bcrypt hashes, public registration creates pending accounts, and only an administrator can approve or reject them. Approval is checked on login and every protected API request. Login and registration are rate limited, and logout revokes existing tokens. Never use a checked-in/default password; supply deployment secrets through a secret manager.
+
+`HttpOnly` prevents application JavaScript from reading the authentication token; it cannot hide a token from the browser owner inspecting their own network traffic or cookie storage. Use HTTPS in production. This assessment app still needs production identity controls such as SSO/MFA, role-based least privilege, login throttling, audit trails, key rotation, and security monitoring before handling real salary data. Seed data is fictional and seeding is disabled in production.

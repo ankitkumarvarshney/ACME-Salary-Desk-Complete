@@ -16,7 +16,7 @@ The primary user is an authorized HR manager. They need to find an employee quic
 
 ## Deliberately out of scope
 - Payroll runs, payslips, tax, benefits, bonuses, equity, and integrations with HRIS or banking systems: they require jurisdiction-specific rules and operational controls beyond this data-management exercise.
-- Authentication, role administration, and production authorization: a real deployment must add SSO, least-privilege access, and audit-grade identity controls before exposing salary data. The local demo is not safe for real employee information.
+- Production SSO, fine-grained role administration, and audit-grade authorization: the local workflow supports pending registration and administrator approval, but a real deployment must add SSO/MFA and least-privilege controls before exposing salary data. The local demo is not safe for real employee information.
 - Historical salary changes and approval workflows: valuable for governance, but they need an agreed effective-date and approval model; this release edits the current record only.
 - Currency conversion and global pay-equity conclusions: exchange rates and normalized compensation methodology are not specified. Summaries remain separated by currency and are descriptive, not policy recommendations.
 - CSV import/export and advanced reporting: spreadsheet migration and bespoke reporting need explicit field mapping, privacy, and export controls; the initial workflow establishes a validated source of truth first.
